@@ -47,16 +47,16 @@ contract FibonacciGroth16Test is Test {
         assert(b == fixture.b);
     }
 
-    function testFail_InvalidFibonacciProof() public view {
+    function test_RevertWhen_InvalidFibonacciProof() public view {
         SP1ProofFixtureJson memory fixture = loadFixture();
 
         // Create a fake proof.
         bytes memory fakeProof = new bytes(fixture.proof.length);
 
+        vm.expectRevert();
         fibonacci.verifyFibonacciProof(fixture.publicValues, fakeProof);
     }
 }
-
 
 contract FibonacciPlonkTest is Test {
     using stdJson for string;
