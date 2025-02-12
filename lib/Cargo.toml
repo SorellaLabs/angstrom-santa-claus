@@ -1,7 +1,12 @@
 [package]
-name = "fibonacci-lib"
+name = "santa-lib"
 version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-alloy-sol-types = { workspace = true }
+alloy-sol-types.workspace = true
+alloy-consensus.workspace = true
+alloy-trie.workspace = true
+alloy-rlp.workspace = true
+alloy-primitives.workspace = true
+

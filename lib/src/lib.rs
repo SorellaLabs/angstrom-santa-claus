@@ -1,22 +1,21 @@
-use alloy_sol_types::sol;
+use alloy_primitives::B256;
 
-sol! {
-    /// The public values encoded as a struct that can be easily deserialized inside Solidity.
-    struct PublicValuesStruct {
-        uint32 n;
-        uint32 a;
-        uint32 b;
-    }
-}
+mod partial_header;
+pub use partial_header::PartialHeader;
 
-/// Compute the n'th fibonacci number (wrapping around on overflows), using normal Rust code.
-pub fn fibonacci(n: u32) -> (u32, u32) {
-    let mut a = 0u32;
-    let mut b = 1u32;
-    for _ in 0..n {
-        let c = a.wrapping_add(b);
-        a = b;
-        b = c;
+pub fn verify_hash_chain<I, H, T>(mut last_hash: B256, headers: I) -> Option<B256>
+where
+    T: AsRef<[u8]>,
+    H: AsRef<PartialHeader<T>>,
+    I: IntoIterator<Item = H>,
+{
+    let mut headers = headers.into_iter();
+    while let Some(header) = headers.next() {
+        let header = header.as_ref();
+        if header.parent_hash != last_hash {
+            return None;
+        }
+        last_hash = header.hash();
     }
-    (a, b)
+    Some(last_hash)
 }
