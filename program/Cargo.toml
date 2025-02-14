@@ -4,9 +4,7 @@ name = "fibonacci-program"
 edition = "2021"
 
 [dependencies]
-alloy-sol-types = { workspace = true }
+alloy-sol-types.workspace = true
 sp1-zkvm = "4.0.1"
-fibonacci-lib = { path = "../lib" }
-
-[patch.crates-io]
-tiny-keccak = { git = "https://github.com/sp1-patches/tiny-keccak", tag = "patch-2.0.2-sp1-4.0.0" }
+santa-lib.workspace = true
+tiny-keccak = "2.0.2"
