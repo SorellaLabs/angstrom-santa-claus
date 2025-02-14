@@ -11,16 +11,53 @@
 //! ```
 
 use alloy_consensus::proofs::calculate_receipt_root;
+use alloy_eips::Encodable2718;
+use alloy_primitives::Bytes;
 use alloy_provider::{Provider, ProviderBuilder};
-use alloy_rlp::Encodable;
+use alloy_trie::{proof::verify_proof, Nibbles};
+
+use alloy_rlp::{encode_list as raw_encode_list, Encodable};
+
 use clap::Parser;
-use santa_lib::{verify_hash_chain, PartialHeader};
+use santa_lib::{
+    receipt_trie::{get_proof_for_receipt, receipt_trie_root_from_proof, ProofBuilder},
+    verify_hash_chain, PartialHeader,
+};
 use sp1_sdk::{include_elf, ProverClient, SP1Stdin};
 use std::collections::HashMap;
 use tracing::info;
 
 /// The ELF (executable and linkable format) file for the Succinct RISC-V zkVM.
 pub const FIBONACCI_ELF: &[u8] = include_elf!("fibonacci-program");
+
+fn rlp_encode<T>(x: T) -> Vec<u8>
+where
+    T: Encodable,
+{
+    let mut buf = Vec::new();
+    x.encode(&mut buf);
+    buf
+}
+
+fn nib_str(nibbles: &Nibbles) -> String {
+    let mut s = Vec::with_capacity(nibbles.len());
+    for b in nibbles.into_iter() {
+        s.push(b"0123456789abcdef"[*b as usize]);
+    }
+    unsafe { String::from_utf8_unchecked(s) }
+}
+
+fn encode_2718<T: Encodable2718>(x: &T) -> Vec<u8> {
+    let mut buf = Vec::new();
+    x.encode_2718(&mut buf);
+    buf
+}
+
+fn encode_list(values: &[Vec<u8>]) -> Vec<u8> {
+    let mut buf = Vec::new();
+    raw_encode_list::<_, [u8]>(values, &mut buf);
+    buf
+}
 
 /// The arguments for the command.
 #[derive(Parser, Debug)]
@@ -36,13 +73,28 @@ struct Args {
     rpc_url: String,
 
     #[clap(long, help = "start block")]
-    start: u64,
+    start: Option<u64>,
 
     #[clap(long, help = "end block")]
-    end: u64,
+    end: Option<u64>,
 
     #[clap(long, default_value_t = 100)]
     chunk_size: u64,
+
+    #[clap(long)]
+    target: Option<u64>,
+
+    #[clap(long)]
+    skip_receipts: bool,
+
+    #[clap(long, group = "minmax")]
+    min: bool,
+
+    #[clap(long, group = "minmax")]
+    max: bool,
+
+    #[clap(long, default_value_t = 0)]
+    index: u32,
 }
 
 #[tokio::main]
@@ -57,47 +109,63 @@ async fn main() -> eyre::Result<()> {
     info!("Setting up rpc with URL {}", rpc_url);
     let provider = ProviderBuilder::new().on_http(rpc_url);
 
-    let total_blocks = args.end - args.start;
+    let (start, end) = if let Some(target) = args.target {
+        (target, target + 1)
+    } else {
+        args.start.zip(args.end).unwrap()
+    };
+
+    let total_blocks = end - start;
     let mut blocks = Vec::with_capacity(total_blocks.try_into().unwrap());
 
+    // Fetch blocks
     for i in 0..total_blocks.div_ceil(args.chunk_size) {
-        let start = args.start + i * args.chunk_size;
-        let end = (start + args.chunk_size).min(args.end);
+        let chunk_start = start + i * args.chunk_size;
+        let chunk_end = (chunk_start + args.chunk_size).min(end);
 
-        info!("Fetching blocks {}-{}", start, end);
+        info!("Fetching blocks {}-{}", chunk_start, chunk_end);
 
         let new_blocks = futures::future::try_join_all(
-            (start..end).map(|block| provider.get_block_by_number(block.into(), false.into())),
+            (chunk_start..chunk_end)
+                .map(|block| provider.get_block_by_number(block.into(), false.into())),
         )
         .await?;
 
         blocks.extend(
             new_blocks
                 .into_iter()
-                .zip(start..end)
+                .zip(chunk_start..chunk_end)
                 .map(|(block, bn)| block.unwrap_or_else(|| panic!("Block #{} was empty", bn))),
         );
     }
 
-    println!("blocks[0].transactions: {:?}", blocks[0].transactions);
-
-    let mut tx_receipts = HashMap::new();
-
-    let mut tx_hashes = blocks
-        .iter()
-        .map(|block| block.transactions.as_hashes().unwrap())
-        .flatten();
-    let mut tx_hash_batch = vec![];
-
-    let total_txs: usize = blocks.iter().map(|block| block.transactions.len()).sum();
-    let chunk_size: usize = args.chunk_size.try_into().unwrap();
-    loop {
-        let mut added = false;
-        if let Some(hash) = tx_hashes.next() {
-            added = true;
-            tx_hash_batch.push(hash);
+    // Determine target block
+    let target_block = args.target.or_else(|| {
+        if args.max {
+            blocks.iter().max_by_key(|b| b.transactions.len())
+        } else if args.min {
+            blocks
+                .iter()
+                .filter(|b| b.transactions.len() >= 1)
+                .min_by_key(|b| b.transactions.len())
+        } else {
+            None
         }
-        if tx_hash_batch.len() == chunk_size || !added {
+        .map(|b| b.header.number)
+    });
+
+    // Fetch receipts for all blocks *or* just target
+    let mut tx_receipts = HashMap::new();
+    let tx_hashes = blocks
+        .iter()
+        .filter(|b| target_block.map_or(true, |n| b.header.number == n))
+        .map(|block| block.transactions.as_hashes().unwrap())
+        .flatten()
+        .collect::<Vec<_>>();
+    let total_txs: usize = tx_hashes.len();
+    let chunk_size: usize = args.chunk_size.try_into().unwrap();
+    if !args.skip_receipts {
+        for tx_hash_batch in tx_hashes.chunks(chunk_size) {
             info!(
                 "Fetching receipts {}-{} / {}",
                 tx_receipts.len(),
@@ -112,35 +180,41 @@ async fn main() -> eyre::Result<()> {
             .await?;
 
             tx_hash_batch
-                .drain(..)
+                .iter()
                 .zip(receipts)
                 .for_each(|(hash, receipt)| {
                     let receipt = receipt.unwrap().into_primitives_receipt();
                     tx_receipts.insert(*hash, receipt);
                 });
         }
-
-        if !added {
-            break;
-        }
     }
 
-    let block = &blocks[0];
-    println!(
-        "block.header.receipts_root: {:?}",
-        block.header.receipts_root
-    );
-
+    // Hash chain stuff
     let first_hash = blocks[0].header.parent_hash;
-
     let res = verify_hash_chain(
         first_hash,
         blocks
             .iter()
             .map(|block| PartialHeader::from(&block.header)),
     );
+    assert_eq!(
+        res.unwrap(),
+        blocks.iter().last().unwrap().header.hash,
+        "hash chain mismatch"
+    );
+    println!("✅ hash chain verified");
 
-    println!("res: {:?}", res);
+    let block_index = target_block.map_or(0, |t| t - start) as usize;
+    let block = &blocks[block_index];
+    info!(
+        "Targeting: {} (total tx: {})",
+        block_index + start as usize,
+        block.transactions.len()
+    );
+    println!(
+        "block.header.receipts_root: {:?}",
+        block.header.receipts_root
+    );
 
     let block_receipts: Vec<_> = block
         .transactions
@@ -149,40 +223,53 @@ async fn main() -> eyre::Result<()> {
         .map(|hash| tx_receipts.get(&hash).unwrap().inner.clone())
         .collect();
 
-    let root = calculate_receipt_root(block_receipts.as_slice());
+    block_receipts.iter().enumerate().for_each(|(i, receipt)| {
+        let proof = get_proof_for_receipt(block_receipts.as_slice(), i as u32);
+        assert_eq!(
+            block.header.receipts_root,
+            receipt_trie_root_from_proof(&proof, {
+                let mut buf = Vec::<u8>::new();
+                receipt.encode_2718(&mut buf);
+                buf
+            }),
+            "Receipt #{} failed to match",
+            i
+        );
+    });
 
-    println!("root: {:?}", root);
+    println!(
+        "✅ {}/{} proofs verified",
+        block_receipts.len(),
+        block_receipts.len()
+    );
 
-    println!("block.header: {:?}", block.header.inner);
-    let mut encoded: Vec<u8> = vec![];
-    block.header.encode(&mut encoded);
+    // block_receipts[0].encode_2718
 
-    let header = &block.header;
+    // let res = verify_proof(
+    //     block.header.receipts_root,
+    //     key.clone(),
+    //     Some(encode_2718(&block_receipts[args.index as usize])),
+    //     proof
+    //         .iter()
+    //         .filter(|(k, _)| {
+    //             if *k != key {
+    //                 true
+    //             } else {
+    //                 println!("k: {:?}", k);
+    //                 false
+    //             }
+    //         })
+    //         .map(|(k, x)| {
+    //             println!("{:?}: {}", k, x);
+    //             x
+    //         }),
+    // );
+    // println!("res: {:?}", res);
 
-    let partial = PartialHeader::from(header);
-
-    println!("header.length(): {:?}", header.length());
-    println!("partial.length(): {:?}", partial.length());
-
-    println!("header.hash_slow(): {:?}", header.hash_slow());
-    println!("partial.hash_slow(): {:?}", partial.hash());
-
-    // for tx_chunk in     {
-    //     println!("tx_chunk: {:?}", tx_chunk);
+    // for i in 0..400u16 {
+    //     let encoded_i = rlp_encode(i);
+    //     println!("{} -> {}", i, hex::encode(&encoded_i));
     // }
-
-    // let block = &blocks[0];
-    // println!(
-    //     "block.header.transactions_root: {:?}",
-    //     block.header.transactions_root
-    // );
-    // println!(
-    //     "block.calculate_transactions_root: {:?}",
-    //     block.calculate_transactions_root()
-    // );
-    // let txs = &block.transactions.as_transactions().unwrap();
-    // let tx = &txs[0];
-    // println!("{:?}", tx.inner.tx_hash());
 
     // Setup the prover client.
     // let client = ProverClient::from_env();
@@ -220,3 +307,23 @@ async fn main() -> eyre::Result<()> {
 
     Ok(())
 }
+/*
+
+REAL
+
+f9 - list
+    len: 0112
+    .0:
+        82 - str
+        0x2080
+
+    b9010c<receipt>
+
+MINE
+
+f9 - list
+    len: 0112
+    2080b9010c
+
+
+*/

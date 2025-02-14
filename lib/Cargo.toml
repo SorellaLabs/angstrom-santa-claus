@@ -9,4 +9,4 @@ alloy-consensus.workspace = true
 alloy-trie.workspace = true
 alloy-rlp.workspace = true
 alloy-primitives.workspace = true
-
+alloy-eips.workspace = true

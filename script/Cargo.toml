@@ -28,6 +28,7 @@ alloy-primitives.workspace = true
 santa-lib.workspace = true
 alloy-provider = "0.11.0"
 alloy-rlp.workspace = true
+alloy-eips.workspace = true
 tokio = "1.43.0"
 eyre = "0.6.12"
 futures = "0.3.31"

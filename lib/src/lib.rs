@@ -1,7 +1,10 @@
 use alloy_primitives::B256;
 
 mod partial_header;
+pub mod reader;
+pub mod receipt_trie;
 pub use partial_header::PartialHeader;
+pub use reader::Reader;
 
 pub fn verify_hash_chain<I, H, T>(mut last_hash: B256, headers: I) -> Option<B256>
 where

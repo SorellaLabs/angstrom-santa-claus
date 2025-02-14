@@ -89,7 +89,7 @@ version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ce20c85f6b24a5da40b2350a748e348417f0465dedbb523a4d149143bc4a41ce"
 dependencies = [
- "alloy-eips 0.11.0",
+ "alloy-eips 0.11.1",
  "alloy-primitives",
  "alloy-rlp",
  "alloy-serde 0.11.0",
@@ -121,7 +121,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8e23af02ccded0031ef2b70df4fe9965b1c742c5d5384c8c767ae0311f7e62b9"
 dependencies = [
  "alloy-consensus 0.11.0",
- "alloy-eips 0.11.0",
+ "alloy-eips 0.11.1",
  "alloy-primitives",
  "alloy-rlp",
  "alloy-serde 0.11.0",
@@ -195,9 +195,9 @@ dependencies = [
 
 [[package]]
 name = "alloy-eips"
-version = "0.11.0"
+version = "0.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7149e011edbd588f6df6564b369c75f6b538d76db14053d95e0b43b2d92e4266"
+checksum = "5591581ca2ab0b3e7226a4047f9a1bfcf431da1d0cce3752fda609fea3c27e37"
 dependencies = [
  "alloy-eip2124",
  "alloy-eip2930",
@@ -286,7 +286,7 @@ checksum = "b02ed56783fb2c086a4ac8961175dd6d3ad163e6cf6125f0b83f7de03379b607"
 dependencies = [
  "alloy-consensus 0.11.0",
  "alloy-consensus-any 0.11.0",
- "alloy-eips 0.11.0",
+ "alloy-eips 0.11.1",
  "alloy-json-rpc 0.11.0",
  "alloy-network-primitives 0.11.0",
  "alloy-primitives",
@@ -323,7 +323,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a0624cfa9311aa8283cd3bf5eed883d0d1e823e2a4d57b30e1b49af4b3678a6b"
 dependencies = [
  "alloy-consensus 0.11.0",
- "alloy-eips 0.11.0",
+ "alloy-eips 0.11.1",
  "alloy-primitives",
  "alloy-serde 0.11.0",
  "serde",
@@ -364,7 +364,7 @@ checksum = "07c68df5354225da542efeb6d9388b65773b3304309b437416146e9d1e2bc1bd"
 dependencies = [
  "alloy-chains",
  "alloy-consensus 0.11.0",
- "alloy-eips 0.11.0",
+ "alloy-eips 0.11.1",
  "alloy-json-rpc 0.11.0",
  "alloy-network 0.11.0",
  "alloy-network-primitives 0.11.0",
@@ -487,7 +487,7 @@ checksum = "8a4a43d8b1344e3ef115ed7a2cee934876e4a64d2b9d9bee8738f9806900757e"
 dependencies = [
  "alloy-consensus 0.11.0",
  "alloy-consensus-any 0.11.0",
- "alloy-eips 0.11.0",
+ "alloy-eips 0.11.1",
  "alloy-network-primitives 0.11.0",
  "alloy-primitives",
  "alloy-rlp",
@@ -4154,6 +4154,7 @@ name = "santa-lib"
 version = "0.1.0"
 dependencies = [
  "alloy-consensus 0.11.0",
+ "alloy-eips 0.11.1",
  "alloy-primitives",
  "alloy-rlp",
  "alloy-sol-types",
@@ -4165,6 +4166,7 @@ name = "santa-script"
 version = "0.1.0"
 dependencies = [
  "alloy-consensus 0.11.0",
+ "alloy-eips 0.11.1",
  "alloy-primitives",
  "alloy-provider",
  "alloy-rlp",
