@@ -10,17 +10,12 @@
 //! RUST_LOG=info cargo run --release -- --prove
 //! ```
 
-use alloy_consensus::proofs::calculate_receipt_root;
 use alloy_eips::Encodable2718;
-use alloy_primitives::Bytes;
 use alloy_provider::{Provider, ProviderBuilder};
-use alloy_trie::{proof::verify_proof, Nibbles};
-
-use alloy_rlp::{encode_list as raw_encode_list, Encodable};
 
 use clap::Parser;
 use santa_lib::{
-    receipt_trie::{get_proof_for_receipt, receipt_trie_root_from_proof, ProofBuilder},
+    receipt_trie::{get_proof_for_receipt, receipt_trie_root_from_proof},
     verify_hash_chain, PartialHeader,
 };
 use sp1_sdk::{include_elf, ProverClient, SP1Stdin};
@@ -29,35 +24,6 @@ use tracing::info;
 
 /// The ELF (executable and linkable format) file for the Succinct RISC-V zkVM.
 pub const FIBONACCI_ELF: &[u8] = include_elf!("fibonacci-program");
-
-fn rlp_encode<T>(x: T) -> Vec<u8>
-where
-    T: Encodable,
-{
-    let mut buf = Vec::new();
-    x.encode(&mut buf);
-    buf
-}
-
-fn nib_str(nibbles: &Nibbles) -> String {
-    let mut s = Vec::with_capacity(nibbles.len());
-    for b in nibbles.into_iter() {
-        s.push(b"0123456789abcdef"[*b as usize]);
-    }
-    unsafe { String::from_utf8_unchecked(s) }
-}
-
-fn encode_2718<T: Encodable2718>(x: &T) -> Vec<u8> {
-    let mut buf = Vec::new();
-    x.encode_2718(&mut buf);
-    buf
-}
-
-fn encode_list(values: &[Vec<u8>]) -> Vec<u8> {
-    let mut buf = Vec::new();
-    raw_encode_list::<_, [u8]>(values, &mut buf);
-    buf
-}
 
 /// The arguments for the command.
 #[derive(Parser, Debug)]

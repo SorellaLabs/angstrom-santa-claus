@@ -1,6 +1,6 @@
 use crate::Reader;
 use alloy_eips::Encodable2718;
-use alloy_primitives::{hex, Bytes, Keccak256, B256};
+use alloy_primitives::{Bytes, Keccak256, B256};
 use alloy_rlp::{encode_fixed_size, length_of_length, Encodable, Rlp};
 use alloy_trie::{
     proof::ProofNodes, proof::ProofRetainer, root::adjust_index_for_rlp, HashBuilder, Nibbles,
