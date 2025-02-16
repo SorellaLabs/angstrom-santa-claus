@@ -53,10 +53,6 @@ impl Keccak256 {
         swap_endianess(&mut self.0[start..end]);
     }
 
-    fn setout(&mut self, dst: &mut [u8], offset: usize, len: usize) {
-        self.execute(offset, len, |buffer| dst[..len].copy_from_slice(buffer));
-    }
-
     fn xorin(&mut self, src: &[u8], offset: usize, len: usize) {
         self.execute(offset, len, |dst| {
             let len = dst.len();
@@ -136,7 +132,10 @@ impl Keccak256 {
 
         self.keccak();
 
-        self.setout(output, 0, 32);
+        let words_out: &mut [u64; 4] = unsafe { core::mem::transmute(output) };
+        for i in 0..4 {
+            words_out[i] = self.buffer[i];
+        }
 
         for i in RATE / 8..WORDS {
             self.buffer[i] = 0;
