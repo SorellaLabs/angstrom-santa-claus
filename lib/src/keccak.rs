@@ -1,4 +1,3 @@
-use alloy_primitives::hex;
 use tiny_keccak::keccakf;
 
 const WORDS: usize = 25;
@@ -123,49 +122,26 @@ impl Keccak256 {
         self.execute(RATE - 1, 1, |buff| buff[0] ^= 0x80);
     }
 
-    pub fn finalize_and_reset(&mut self, output: &mut [u8]) {
+    pub fn finalize_and_reset(&mut self, output: &mut [u8; 32]) {
         if self.first_block {
             self.execute(self.offset, RATE - self.offset, |b| {
                 for i in 0..b.len() {
                     b[i] = 0;
                 }
             });
-            self.first_block = false;
         }
 
         self.pad();
-        self.fill_block();
 
-        // second foldp
-        let mut op = 0;
-        let mut l = output.len();
-        let mut rate = RATE - self.offset;
-        let mut offset = self.offset;
-        while l >= rate {
-            self.setout(&mut output[op..], offset, rate);
-            self.keccak();
-            op += rate;
-            l -= rate;
-            rate = RATE;
-            offset = 0;
-        }
-
-        self.setout(&mut output[op..], offset, l);
-
-        self.reset();
-    }
-
-    fn fill_block(&mut self) {
         self.keccak();
-        self.offset = 0;
-    }
 
-    fn reset(&mut self) {
-        for i in 0..WORDS {
+        self.setout(output, 0, 32);
+
+        for i in RATE / 8..WORDS {
             self.buffer[i] = 0;
         }
-        self.offset = 0;
         self.first_block = true;
+        self.offset = 0;
     }
 }
 
@@ -197,5 +173,15 @@ mod tests {
         keccak.finalize_and_reset(&mut hash);
 
         assert_eq!(&hash, keccak256(preimage), "long");
+
+        keccak.finalize_and_reset(&mut hash);
+        assert_eq!(&hash, keccak256(""), "empty");
+
+        let preimage = "potato";
+
+        keccak.update(preimage.as_bytes());
+        keccak.finalize_and_reset(&mut hash);
+
+        assert_eq!(&hash, keccak256(preimage), "potato");
     }
 }
