@@ -30,11 +30,12 @@ impl Keccak256 {
         keccakf(&mut self.buffer)
     }
 
+    /// Expects `offset` & `len` to be within the byte-bounds of `self.buffer`.
     #[cfg(target_endian = "little")]
     #[inline]
-    fn execute<F: FnOnce(&mut [u8])>(&mut self, offset: usize, len: usize, f: F) {
+    unsafe fn execute<F: FnOnce(&mut [u8])>(&mut self, offset: usize, len: usize, f: F) {
         let buffer: &mut [u8; BYTES] = unsafe { core::mem::transmute(&mut self.buffer) };
-        f(unsafe { buffer.get_unchecked_mut(offset..).get_unchecked_mut(..len) });
+        f(buffer.get_unchecked_mut(offset..).get_unchecked_mut(..len));
     }
 
     #[cfg(target_endian = "big")]
@@ -54,32 +55,28 @@ impl Keccak256 {
         swap_endianess(&mut self.0[start..end]);
     }
 
-    fn xorin(&mut self, src: &[u8], offset: usize, len: usize) {
+    unsafe fn xorin(&mut self, src: &[u8], offset: usize, len: usize) {
         self.execute(offset, len, |dst| {
             let len = dst.len();
             let mut dst_ptr = dst.as_mut_ptr();
             let mut src_ptr = src.as_ptr();
             for _ in 0..len {
-                unsafe {
-                    *dst_ptr ^= *src_ptr;
-                    src_ptr = src_ptr.offset(1);
-                    dst_ptr = dst_ptr.offset(1);
-                }
+                *dst_ptr ^= *src_ptr;
+                src_ptr = src_ptr.offset(1);
+                dst_ptr = dst_ptr.offset(1);
             }
         });
     }
 
-    fn setin(&mut self, src: &[u8], offset: usize, len: usize) {
+    unsafe fn setin(&mut self, src: &[u8], offset: usize, len: usize) {
         self.execute(offset, len, |dst| {
             let len = dst.len();
             let mut dst_ptr = dst.as_mut_ptr();
             let mut src_ptr = src.as_ptr();
             for _ in 0..len {
-                unsafe {
-                    *dst_ptr = *src_ptr;
-                    src_ptr = src_ptr.offset(1);
-                    dst_ptr = dst_ptr.offset(1);
-                }
+                *dst_ptr = *src_ptr;
+                src_ptr = src_ptr.offset(1);
+                dst_ptr = dst_ptr.offset(1);
             }
         });
     }
@@ -90,43 +87,55 @@ impl Keccak256 {
 
         if self.first_block {
             if input.len() >= rate {
-                self.setin(input, offset, rate);
+                unsafe {
+                    self.setin(input, offset, rate);
+                }
                 self.keccak();
                 self.first_block = false;
                 input = &input[rate..];
                 rate = RATE;
                 offset = 0;
             } else {
-                self.setin(input, offset, input.len());
+                unsafe {
+                    self.setin(input, offset, input.len());
+                }
                 self.offset = offset + input.len();
                 return;
             }
         }
 
         while input.len() >= rate {
-            self.xorin(input, offset, rate);
+            unsafe {
+                self.xorin(input, offset, rate);
+            }
             self.keccak();
             input = &input[rate..];
             rate = RATE;
             offset = 0;
         }
 
-        self.xorin(input, offset, input.len());
+        unsafe {
+            self.xorin(input, offset, input.len());
+        }
         self.offset = offset + input.len();
     }
 
     fn pad(&mut self) {
-        self.execute(self.offset, 1, |buff| buff[0] ^= DELIM);
-        self.execute(RATE - 1, 1, |buff| buff[0] ^= 0x80);
+        unsafe {
+            self.execute(self.offset, 1, |buff| buff[0] ^= DELIM);
+            self.execute(RATE - 1, 1, |buff| buff[0] ^= 0x80);
+        }
     }
 
     pub fn finalize_and_reset(&mut self, output: &mut [u8; 32]) {
         if self.first_block {
-            self.execute(self.offset, RATE - self.offset, |b| {
-                for i in 0..b.len() {
-                    b[i] = 0;
-                }
-            });
+            unsafe {
+                self.execute(self.offset, RATE - self.offset, |b| {
+                    for i in 0..b.len() {
+                        b[i] = 0;
+                    }
+                });
+            }
         }
 
         self.pad();
@@ -169,20 +178,20 @@ mod tests {
         keccak.update(preimage.as_bytes());
         keccak.finalize_and_reset(&mut hash);
 
-        assert_eq!(&hash, keccak256(preimage), "first");
+        assert_eq!(&hash, keccak256(preimage), "hello");
 
         hash = Default::default();
         keccak.update(preimage.as_bytes());
         keccak.finalize_and_reset(&mut hash);
 
-        assert_eq!(&hash, keccak256(preimage), "after reset");
+        assert_eq!(&hash, keccak256(preimage), "hello (after reset)");
 
         let preimage = "very long text, incredible, very nice. Multiple bytes aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".repeat(320);
 
         keccak.update(preimage.as_bytes());
         keccak.finalize_and_reset(&mut hash);
 
-        assert_eq!(&hash, keccak256(preimage), "long");
+        assert_eq!(&hash, keccak256(preimage), "long string");
 
         keccak.finalize_and_reset(&mut hash);
         assert_eq!(&hash, keccak256(""), "empty");
