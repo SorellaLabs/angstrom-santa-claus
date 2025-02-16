@@ -24,6 +24,7 @@ const DELIM: u8 = 0x01;
 const RATE: usize = 136;
 
 impl Keccak256 {
+    #[inline]
     fn keccak(&mut self) {
         keccakf(&mut self.buffer)
     }
@@ -32,7 +33,7 @@ impl Keccak256 {
     #[inline]
     fn execute<F: FnOnce(&mut [u8])>(&mut self, offset: usize, len: usize, f: F) {
         let buffer: &mut [u8; BYTES] = unsafe { core::mem::transmute(&mut self.buffer) };
-        f(&mut buffer[offset..][..len]);
+        f(unsafe { buffer.get_unchecked_mut(offset..).get_unchecked_mut(..len) });
     }
 
     #[cfg(target_endian = "big")]
