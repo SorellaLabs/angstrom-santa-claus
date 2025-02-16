@@ -1,10 +1,13 @@
 [package]
 version = "0.1.0"
-name = "fibonacci-program"
+name = "santa-program"
 edition = "2021"
 
 [dependencies]
-alloy-sol-types.workspace = true
 sp1-zkvm = "4.0.1"
+tiny-keccak.workspace = true
 santa-lib.workspace = true
-tiny-keccak = "2.0.2"
+alloy-trie.workspace = true
+alloy-primitives.workspace = true
+alloy-consensus = { workspace = true, features = ["serde"] }
+alloy-rlp.workspace = true

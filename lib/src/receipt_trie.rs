@@ -1,3 +1,4 @@
+use crate::rlp::*;
 use crate::Reader;
 use alloy_eips::Encodable2718;
 use alloy_primitives::{Bytes, Keccak256, B256};
@@ -6,10 +7,7 @@ use alloy_trie::{
     proof::ProofNodes, proof::ProofRetainer, root::adjust_index_for_rlp, HashBuilder, Nibbles,
 };
 
-fn hash_and_get_proof_nodes<R>(items: &[R], index: u32) -> ProofNodes
-where
-    R: Encodable2718,
-{
+pub fn get_trie_proof_nodes(items: &[impl Encodable2718], index: u32) -> ProofNodes {
     assert!((index as usize) < items.len());
 
     let mut value_buffer = Vec::new();
@@ -20,8 +18,6 @@ where
         ProofRetainer::new(vec![Nibbles::unpack(encoded_index_buffer)])
     };
     let mut hb = HashBuilder::default().with_proof_retainer(retainer);
-
-    // hb.with_proof_retainer(Proo)
 
     let items_len = items.len();
     for i in 0..items_len {
@@ -55,7 +51,7 @@ pub fn get_proof_for_receipt<R>(items: &[R], index: u32) -> Vec<u8>
 where
     R: Encodable2718,
 {
-    let proof_nodes = hash_and_get_proof_nodes(items, index);
+    let proof_nodes = get_trie_proof_nodes(items, index);
     let mut proof_steps = proof_nodes.into_inner().into_iter().collect::<Vec<_>>();
     proof_steps.sort_by_key(|(key, _)| std::cmp::Reverse(key.len()));
 
@@ -85,9 +81,6 @@ where
 
     proof_builder.build()
 }
-
-const RLP_STR_OFFSET: u8 = 0x80;
-const RLP_LIST_OFFSET: u8 = 0xc0;
 
 const PATH_FLAG_MASK: u8 = 0x20;
 const LEAF_PATH_FLAG: u8 = 0x20;
@@ -124,12 +117,12 @@ impl Keccak256Debug {
 type Keccak = Keccak256; // To be swapped out when debugging
 
 fn encode_header(hasher: &mut Keccak, offset: u8, payload_length: usize) {
-    if payload_length < 56 {
+    if payload_length <= RLP_MAX_PACKED_LEN as usize {
         let head_byte = offset + payload_length as u8;
         hasher.update([head_byte]);
     } else {
         let length_bytes_length: usize = length_of_length(payload_length) - 1;
-        let head_byte = offset + 55 + length_bytes_length as u8;
+        let head_byte = offset + RLP_MAX_PACKED_LEN + length_bytes_length as u8;
         hasher.update([head_byte]);
 
         let bytes = payload_length.to_be_bytes();

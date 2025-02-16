@@ -15,7 +15,7 @@ use alloy_provider::{Provider, ProviderBuilder};
 
 use clap::Parser;
 use santa_lib::{
-    receipt_trie::{get_proof_for_receipt, receipt_trie_root_from_proof},
+    receipt_trie::{get_proof_for_receipt, get_trie_proof_nodes, receipt_trie_root_from_proof},
     verify_hash_chain, PartialHeader,
 };
 use sp1_sdk::{include_elf, ProverClient, SP1Stdin};
@@ -23,7 +23,7 @@ use std::collections::HashMap;
 use tracing::info;
 
 /// The ELF (executable and linkable format) file for the Succinct RISC-V zkVM.
-pub const FIBONACCI_ELF: &[u8] = include_elf!("fibonacci-program");
+pub const SANTA_ELF: &[u8] = include_elf!("santa-program");
 
 /// The arguments for the command.
 #[derive(Parser, Debug)]
@@ -84,6 +84,8 @@ async fn main() -> eyre::Result<()> {
     let total_blocks = end - start;
     let mut blocks = Vec::with_capacity(total_blocks.try_into().unwrap());
 
+    info!("Fetching blocks");
+
     // Fetch blocks
     for i in 0..total_blocks.div_ceil(args.chunk_size) {
         let chunk_start = start + i * args.chunk_size;
@@ -120,6 +122,8 @@ async fn main() -> eyre::Result<()> {
         .map(|b| b.header.number)
     });
 
+    info!("Fetching receipts");
+
     // Fetch receipts for all blocks *or* just target
     let mut tx_receipts = HashMap::new();
     let tx_hashes = blocks
@@ -153,108 +157,54 @@ async fn main() -> eyre::Result<()> {
                     tx_receipts.insert(*hash, receipt);
                 });
         }
+
+        let block_index = target_block.map_or(0, |t| t - start) as usize;
+        let block = &blocks[block_index];
+        info!(
+            "Targeting: {} (total tx: {})",
+            block_index + start as usize,
+            block.transactions.len()
+        );
+
+        let block_receipts: Vec<_> = block
+            .transactions
+            .hashes()
+            .into_iter()
+            .map(|hash| tx_receipts.get(&hash).unwrap().inner.clone())
+            .collect();
     }
 
-    // Hash chain stuff
-    let first_hash = blocks[0].header.parent_hash;
-    let res = verify_hash_chain(
-        first_hash,
-        blocks
-            .iter()
-            .map(|block| PartialHeader::from(&block.header)),
-    );
-    assert_eq!(
-        res.unwrap(),
-        blocks.iter().last().unwrap().header.hash,
-        "hash chain mismatch"
-    );
-    println!("✅ hash chain verified");
+    if args.execute {
+        let client = ProverClient::from_env();
 
-    let block_index = target_block.map_or(0, |t| t - start) as usize;
-    let block = &blocks[block_index];
-    info!(
-        "Targeting: {} (total tx: {})",
-        block_index + start as usize,
-        block.transactions.len()
-    );
-    println!(
-        "block.header.receipts_root: {:?}",
-        block.header.receipts_root
-    );
+        use alloy_rlp::Encodable;
 
-    let block_receipts: Vec<_> = block
-        .transactions
-        .hashes()
-        .into_iter()
-        .map(|hash| tx_receipts.get(&hash).unwrap().inner.clone())
-        .collect();
+        let mut stdin = SP1Stdin::new();
 
-    block_receipts.iter().enumerate().for_each(|(i, receipt)| {
-        let proof = get_proof_for_receipt(block_receipts.as_slice(), i as u32);
-        assert_eq!(
-            block.header.receipts_root,
-            receipt_trie_root_from_proof(&proof, {
-                let mut buf = Vec::<u8>::new();
-                receipt.encode_2718(&mut buf);
-                buf
-            }),
-            "Receipt #{} failed to match",
-            i
-        );
-    });
+        let headers = blocks
+            .into_iter()
+            .map(|b| {
+                let header = b.header.inner;
+                let mut encoded = Vec::<u8>::with_capacity(header.length());
+                header.encode(&mut encoded);
+                encoded
+            })
+            .collect::<Vec<_>>();
+        let headers = headers.concat();
 
-    println!(
-        "✅ {}/{} proofs verified",
-        block_receipts.len(),
-        block_receipts.len()
-    );
+        stdin.write_vec(headers);
 
-    // block_receipts[0].encode_2718
+        // Execute the program
+        let (output, report) = client.execute(SANTA_ELF, &stdin).run().unwrap();
+        println!("Program executed successfully.");
 
-    // let res = verify_proof(
-    //     block.header.receipts_root,
-    //     key.clone(),
-    //     Some(encode_2718(&block_receipts[args.index as usize])),
-    //     proof
-    //         .iter()
-    //         .filter(|(k, _)| {
-    //             if *k != key {
-    //                 true
-    //             } else {
-    //                 println!("k: {:?}", k);
-    //                 false
-    //             }
-    //         })
-    //         .map(|(k, x)| {
-    //             println!("{:?}: {}", k, x);
-    //             x
-    //         }),
-    // );
-    // println!("res: {:?}", res);
+        println!("start: {}", hex::encode(&output.as_slice()[0..32]));
+        println!("end: {}", hex::encode(&output.as_slice()[32..64]));
 
-    // for i in 0..400u16 {
-    //     let encoded_i = rlp_encode(i);
-    //     println!("{} -> {}", i, hex::encode(&encoded_i));
-    // }
-
-    // Setup the prover client.
-    // let client = ProverClient::from_env();
-
-    // TODO: Setup the inputs.
-    // let mut stdin = SP1Stdin::new();
-    // stdin.write_vec(buffer);
-
-    // if args.execute {
-    //     // Execute the program
-    //     let (output, report) = client.execute(FIBONACCI_ELF, &stdin).run().unwrap();
-    //     println!("Program executed successfully.");
-
-    //     println!("hash1: {}", hex::encode(&output.as_slice()[0..32]));
-    //     println!("hash2: {}", hex::encode(&output.as_slice()[32..64]));
-
-    //     // Record the number of cycles executed.
-    //     println!("Number of cycles: {}", report.total_instruction_count());
-    // } else {
+        // Record the number of cycles executed.
+        println!("Number of cycles: {}", report.total_instruction_count());
+    }
+    //else {
     //     // Setup the program for proving.
     //     let (pk, vk) = client.setup(FIBONACCI_ELF);
 
@@ -270,6 +220,7 @@ async fn main() -> eyre::Result<()> {
     //     client.verify(&proof, &vk).expect("failed to verify proof");
     //     println!("Successfully verified proof!");
     // }
+    info!("Done, shutting off");
 
     Ok(())
 }
