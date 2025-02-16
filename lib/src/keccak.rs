@@ -23,6 +23,7 @@ impl Default for Keccak256 {
 const DELIM: u8 = 0x01;
 const RATE: usize = 136;
 
+/// Keccak256 struct optimized for repeated hashing & outputting 32-byte hashes.
 impl Keccak256 {
     #[inline]
     fn keccak(&mut self) {
@@ -137,11 +138,20 @@ impl Keccak256 {
             words_out[i] = self.buffer[i];
         }
 
+        self.reset();
+    }
+
+    fn reset(&mut self) {
         for i in RATE / 8..WORDS {
             self.buffer[i] = 0;
         }
         self.first_block = true;
         self.offset = 0;
+    }
+
+    pub fn complete(&mut self, input: &[u8], output: &mut [u8; 32]) {
+        self.update(input);
+        self.finalize_and_reset(output);
     }
 }
 

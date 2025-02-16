@@ -13,9 +13,7 @@ use alloy_primitives::{hex, Bytes, B256};
 use alloy_rlp::Decodable;
 use alloy_trie::{proof::verify_proof, Nibbles};
 // use santa_lib::receipt_trie::receipt_trie_root_from_proof;
-use santa_lib::keccak::Keccak256;
-use santa_lib::{header_lens::EncodedHeaderLens, Reader};
-use tiny_keccak::{Hasher, Keccak};
+use santa_lib::{header_lens::EncodedHeaderLens, Keccak256, Reader};
 
 pub fn main() {
     let headers = sp1_zkvm::io::read_vec();
@@ -26,18 +24,17 @@ pub fn main() {
     let mut keccak = Keccak256::default();
     let mut last_hash = [0u8; 32];
 
-    let header = EncodedHeaderLens::read_from(&mut reader).unwrap();
-    out.extend_from_slice(header.parent_hash());
-
-    keccak.update(&header);
-    keccak.finalize_and_reset(&mut last_hash);
+    {
+        let header = EncodedHeaderLens::read_from(&mut reader).unwrap();
+        out.extend_from_slice(header.parent_hash());
+        keccak.complete(&header, &mut last_hash);
+    }
 
     while !reader.is_empty() {
         let header = EncodedHeaderLens::read_from(&mut reader).unwrap();
         assert_eq!(&last_hash, header.parent_hash(), "Broken parent-child-link");
 
-        keccak.update(&header);
-        keccak.finalize_and_reset(&mut last_hash);
+        keccak.complete(&header, &mut last_hash);
     }
 
     out.extend_from_slice(last_hash.as_slice());
