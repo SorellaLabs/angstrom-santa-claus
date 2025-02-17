@@ -81,7 +81,8 @@ impl Keccak256 {
         });
     }
 
-    pub fn update(&mut self, mut input: &[u8]) {
+    pub fn update(&mut self, input: impl AsRef<[u8]>) {
+        let mut input = input.as_ref();
         let mut rate = RATE - self.offset;
         let mut offset = self.offset;
 

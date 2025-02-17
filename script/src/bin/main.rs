@@ -14,9 +14,8 @@ use alloy_eips::Encodable2718;
 use alloy_provider::{Provider, ProviderBuilder};
 
 use clap::Parser;
-use santa_lib::{
-    receipt_trie::{get_proof_for_receipt, get_trie_proof_nodes, receipt_trie_root_from_proof},
-    verify_hash_chain, PartialHeader,
+use santa_lib::receipt_trie::{
+    get_proof_for_receipt, get_trie_proof_nodes, receipt_trie_root_from_proof,
 };
 use sp1_sdk::{include_elf, ProverClient, SP1Stdin};
 use std::collections::HashMap;
