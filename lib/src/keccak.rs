@@ -139,6 +139,7 @@ impl Keccak256 {
             self.first_block = false;
         }
 
+        // Absorb remaining full blocks.
         if align_offset == 0 {
             while input.len() >= BLOCK_SIZE {
                 let (block, right) = input.split_at(BLOCK_SIZE);
@@ -157,25 +158,23 @@ impl Keccak256 {
             }
         }
 
-        let buffer = self.state.as_mut();
+        let state_bytes = self.state.as_mut();
         for i in 0..input.len() {
-            buffer[i] ^= input[i];
+            state_bytes[i] ^= input[i];
         }
         self.offset = input.len();
     }
 
     fn pad(&mut self) {
+        let state_bytes = self.state.as_mut();
         if self.first_block {
-            let buffer = self.state.as_mut();
             for i in self.offset..BLOCK_SIZE {
-                buffer[i] = 0;
+                state_bytes[i] = 0;
             }
         }
-        unsafe {
-            let buffer: &mut [u8; STATE_BYTES] = core::mem::transmute(&mut self.state);
-            *buffer.get_unchecked_mut(self.offset) ^= DELIM;
-            *buffer.get_unchecked_mut(BLOCK_SIZE - 1) ^= 0x80;
-        }
+
+        state_bytes[self.offset] ^= DELIM;
+        state_bytes[BLOCK_SIZE - 1] ^= 0x80;
     }
 
     pub fn finalize_and_reset(&mut self, output: &mut [u8; 32]) {
