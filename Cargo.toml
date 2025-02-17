@@ -8,7 +8,8 @@ resolver = "2"
 
 [workspace.dependencies]
 santa-lib = { path = "./lib" }
-alloy-primitives = "0.8.21"
+alloy-primitives = { version = "0.8.21", default-features = false, features = ["sha3-keccak"] }
+# alloy-primitives =  "0.8.21"
 alloy-consensus = "0.11.0"
 alloy-trie = "0.7.9"
 alloy-rlp = "0.3.11"
@@ -16,7 +17,8 @@ alloy-eips = "0.11.1"
 hex = "0.4.3"
 tracing = "0.1.41"
 tiny-keccak = "2.0.2"
+sha3 = { version = "0.10.8", default-features = false }
 
 [patch.crates-io]
 tiny-keccak = { git = "https://github.com/sp1-patches/tiny-keccak", tag = "patch-2.0.2-sp1-4.0.0" }
-# alloy-trie = { path = "../../Rust/alloy-trie" }
+sha3 = { git = "https://github.com/sp1-patches/RustCrypto-hashes", package = "sha3", tag = "patch-sha3-0.10.8-sp1-4.0.0" }

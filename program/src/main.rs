@@ -8,12 +8,42 @@
 #![no_main]
 sp1_zkvm::entrypoint!(main);
 
-use alloy_consensus::Header;
-use alloy_primitives::{hex, Bytes, B256};
-use alloy_rlp::Decodable;
-use alloy_trie::{proof::verify_proof, Nibbles};
-// use santa_lib::receipt_trie::receipt_trie_root_from_proof;
-use santa_lib::{header_lens::EncodedHeaderLens, Keccak256, Reader};
+use santa_lib::{header_lens::EncodedHeaderLens, Keccak256 as SantaKeccak256, Reader};
+use sha3::{Digest, Keccak256 as Sha3Keccak256};
+
+trait SimpleHash {
+    fn init() -> Self;
+    fn s_update(&mut self, input: impl AsRef<[u8]>);
+
+    fn finish(&mut self, out: &mut [u8; 32]);
+}
+
+impl SimpleHash for Sha3Keccak256 {
+    fn init() -> Self {
+        Self::new()
+    }
+
+    fn s_update(&mut self, input: impl AsRef<[u8]>) {
+        self.update(input);
+    }
+
+    fn finish(&mut self, out: &mut [u8; 32]) {
+        self.finalize_into_reset(out.into());
+    }
+}
+
+impl SimpleHash for SantaKeccak256 {
+    fn init() -> Self {
+        Self::default()
+    }
+    fn s_update(&mut self, input: impl AsRef<[u8]>) {
+        self.update(input);
+    }
+
+    fn finish(&mut self, out: &mut [u8; 32]) {
+        self.finalize_and_reset(out);
+    }
+}
 
 pub fn main() {
     let headers = sp1_zkvm::io::read_vec();
@@ -21,43 +51,25 @@ pub fn main() {
 
     let mut out = Vec::with_capacity(64);
 
-    let mut keccak = Keccak256::default();
-    let mut last_hash = [0u8; 32];
+    let mut keccak = SantaKeccak256::init();
 
+    let mut last_hash = [0u8; 32];
     {
         let header = EncodedHeaderLens::read_from(&mut reader).unwrap();
         out.extend_from_slice(header.parent_hash());
-        keccak.complete(&header, &mut last_hash);
-    }
+        keccak.s_update(header);
+        keccak.finish(&mut last_hash);
+    };
 
     while !reader.is_empty() {
         let header = EncodedHeaderLens::read_from(&mut reader).unwrap();
         assert_eq!(&last_hash, header.parent_hash(), "Broken parent-child-link");
 
-        keccak.complete(&header, &mut last_hash);
+        keccak.s_update(header);
+        keccak.finish(&mut last_hash);
     }
 
     out.extend_from_slice(last_hash.as_slice());
 
     sp1_zkvm::io::commit_slice(&out);
 }
-
-// fn alloy_verify(receipt: Vec<u8>, root: B256) -> bool {
-//     let key = Nibbles::from_vec(sp1_zkvm::io::read_vec());
-
-//     let total_bytes = sp1_zkvm::io::read_vec();
-//     let total_elements = u16::from_le_bytes([unsafe { *total_bytes.get_unchecked(1) }, unsafe {
-//         *total_bytes.get_unchecked(0)
-//     }]);
-
-//     let mut proof: Vec<Bytes> = Vec::with_capacity(total_elements as usize);
-//     for _ in 0..total_elements {
-//         proof.push(Bytes::from(sp1_zkvm::io::read_vec()));
-//     }
-//     verify_proof(root, key, Some(receipt), proof.iter()).is_ok()
-// }
-
-// fn santa_verify(receipt: Vec<u8>, root: B256) -> bool {
-//     let proof = sp1_zkvm::io::read_vec();
-//     receipt_trie_root_from_proof(proof, receipt) == root
-// }

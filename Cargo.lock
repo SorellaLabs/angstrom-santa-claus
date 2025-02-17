@@ -4197,6 +4197,7 @@ dependencies = [
  "alloy-rlp",
  "alloy-trie",
  "santa-lib",
+ "sha3",
  "sp1-zkvm",
  "tiny-keccak",
 ]
@@ -4477,8 +4478,7 @@ dependencies = [
 [[package]]
 name = "sha3"
 version = "0.10.8"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "75872d278a8f37ef87fa0ddbda7802605cb18344497949862c0d4dcb291eba60"
+source = "git+https://github.com/sp1-patches/RustCrypto-hashes?tag=patch-sha3-0.10.8-sp1-4.0.0#8f6d303c0861ba7e5adcc36207c0f41fe5edaabc"
 dependencies = [
  "digest 0.10.7",
  "keccak",

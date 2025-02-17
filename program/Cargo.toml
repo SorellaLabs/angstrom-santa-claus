@@ -11,3 +11,4 @@ alloy-trie.workspace = true
 alloy-primitives.workspace = true
 alloy-consensus = { workspace = true, features = ["serde"] }
 alloy-rlp.workspace = true
+sha3.workspace = true

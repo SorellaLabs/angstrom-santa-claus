@@ -1,6 +1,7 @@
 use crate::rlp::*;
 use crate::Reader;
 use alloy_primitives::{keccak256, B256};
+use std::ops::Deref;
 
 /// Tracks an already RLP encoded, partially validated header. Only validates that the encoding is
 /// valid up to the `receipts_root` field.
@@ -12,7 +13,7 @@ pub struct EncodedHeaderLens<'a> {
 
 impl<'a> EncodedHeaderLens<'a> {
     pub fn hash(&self) -> B256 {
-        keccak256(self.encoded)
+        keccak256(self)
     }
 
     pub fn read_from(reader: &mut Reader<'a>) -> Result<Self, String> {
@@ -71,11 +72,17 @@ impl<'a> EncodedHeaderLens<'a> {
     }
 }
 
-impl<'a> std::ops::Deref for EncodedHeaderLens<'a> {
+impl<'a> Deref for EncodedHeaderLens<'a> {
     type Target = [u8];
 
     fn deref(&self) -> &Self::Target {
         self.encoded
+    }
+}
+
+impl<'a> AsRef<[u8]> for EncodedHeaderLens<'a> {
+    fn as_ref(&self) -> &[u8] {
+        &self.encoded
     }
 }
 
