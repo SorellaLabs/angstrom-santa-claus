@@ -74,7 +74,7 @@ impl Keccak256 {
         }
     }
 
-    /// Safety: Assumes caller has checked that `block` is aligned with width of ```Word```
+    /// Safety: Assumes caller has checked that `block` is aligned with width of `Word`
     #[inline]
     unsafe fn absorb_aligned(&mut self, first: bool, block: &[u8]) {
         let block: &[Word] =
@@ -86,8 +86,9 @@ impl Keccak256 {
 
         self.permute();
     }
+
     #[inline]
-    fn absorb_block(&mut self, first: bool, block: &[u8]) {
+    fn absorb_block(&mut self, first: bool, block: &[u8; BLOCK_SIZE]) {
         for (s, b) in self.state.iter_mut().zip(block.chunks_exact(WORD_BYTES)) {
             Self::absorb(first, s, &Word::from_le_bytes(b.try_into().unwrap()));
         }
@@ -97,7 +98,6 @@ impl Keccak256 {
 
     pub fn update(&mut self, input: impl AsRef<[u8]>) {
         let mut input = input.as_ref();
-        let offset = self.offset;
         let rem = BLOCK_SIZE - self.offset;
 
         // If input not long enough to fill block partially absorb.
@@ -106,17 +106,17 @@ impl Keccak256 {
             for (s, inp) in state_bytes.iter_mut().zip(input) {
                 Self::absorb(self.first_block, s, inp);
             }
-            self.offset = offset + input.len();
+            self.offset += input.len();
             return;
         }
 
         // If last block was incomplete, complete first.
-        if offset != 0 {
+        if self.offset != 0 {
             let (left, right) = input.split_at(rem);
             input = right;
 
             let state_bytes = self.state.as_mut();
-            for (s, inp) in state_bytes[offset..].iter_mut().zip(left) {
+            for (s, inp) in state_bytes[self.offset..].iter_mut().zip(left) {
                 Self::absorb(self.first_block, s, inp);
             }
 
@@ -133,7 +133,7 @@ impl Keccak256 {
             if align_offset == 0 {
                 unsafe { self.absorb_aligned(true, block) };
             } else {
-                self.absorb_block(true, block);
+                self.absorb_block(true, block.try_into().unwrap());
             }
 
             self.first_block = false;
@@ -145,8 +145,8 @@ impl Keccak256 {
                 let (block, right) = input.split_at(BLOCK_SIZE);
                 input = right;
 
-                // If `input` was aligned initially and we only split in aligned increments we know
-                // the resulting slice is aligned.
+                // Safety: If `input` was aligned initially and we only split in aligned
+                // increments we know the resulting slice is still aligned.
                 unsafe { self.absorb_aligned(false, block) };
             }
         } else {
@@ -154,10 +154,11 @@ impl Keccak256 {
                 let (block, right) = input.split_at(BLOCK_SIZE);
                 input = right;
 
-                self.absorb_block(false, block);
+                self.absorb_block(false, block.try_into().unwrap());
             }
         }
 
+        // Absorb remainder of input that doesn't quite fit into a block.
         let state_bytes = self.state.as_mut();
         for i in 0..input.len() {
             state_bytes[i] ^= input[i];
@@ -168,6 +169,8 @@ impl Keccak256 {
     fn pad(&mut self) {
         let state_bytes = self.state.as_mut();
         if self.first_block {
+            // If we didn't complete the first block by the time we're padding we need to zero out
+            // the bytes that are potentially still dirty from the last hash.
             for i in self.offset..BLOCK_SIZE {
                 state_bytes[i] = 0;
             }
