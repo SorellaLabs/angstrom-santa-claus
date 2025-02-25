@@ -14,16 +14,15 @@ path = "src/bin/vkey.rs"
 
 [dependencies]
 sp1-sdk = {version = "4.0.1", features = ["profiling"] }
-serde_json = { version = "1.0", default-features = false, features = ["alloc"] }
-serde = { version = "1.0.200", default-features = false, features = ["derive"] }
 clap = { version = "4.0", features = ["derive", "env"] }
 tracing.workspace = true
 hex.workspace = true
 alloy-primitives.workspace = true
 santa-lib.workspace = true
-alloy-provider = "0.11.0"
+alloy-provider = {version ="0.11.0", features=["ipc"]}
 alloy-rlp.workspace = true
 alloy-eips.workspace = true
+rand.workspace = true
 tokio = "1.43.0"
 eyre = "0.6.12"
 futures = "0.3.31"

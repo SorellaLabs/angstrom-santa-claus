@@ -9,8 +9,8 @@ impl<'a> Reader<'a> {
     }
 
     pub fn read_next(&mut self, size: usize) -> &'a [u8] {
-        let slice = &self.0[..size];
-        self.0 = &self.0[size..];
+        let (slice, rem) = self.0.split_at(size);
+        self.0 = rem;
         slice
     }
 }

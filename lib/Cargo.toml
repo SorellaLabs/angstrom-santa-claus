@@ -10,3 +10,12 @@ alloy-rlp.workspace = true
 alloy-primitives.workspace = true
 alloy-eips.workspace = true
 tiny-keccak.workspace = true
+typenum = "1.18.0"
+rand = { workspace = true, optional = true}
+serde_json = { version = "1.0.138", default-features = false, features = ["alloc"] }
+serde = { version = "1.0.217", default-features = false, features = ["derive"] }
+tracing.workspace = true
+
+[features]
+default = ["random"]
+random = ["dep:rand"]

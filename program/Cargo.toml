@@ -6,7 +6,7 @@ edition = "2021"
 [dependencies]
 sp1-zkvm = "4.0.1"
 tiny-keccak.workspace = true
-santa-lib.workspace = true
+santa-lib = {workspace = true, default-features = false}
 alloy-trie.workspace = true
 alloy-primitives.workspace = true
 alloy-consensus = { workspace = true, features = ["serde"] }
