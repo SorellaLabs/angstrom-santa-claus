@@ -1,7 +1,7 @@
 use crate::bytes_wrapper;
 use alloy_primitives::Address;
 
-const FEE_ENTRY_SIZE: usize = 36; // 20 bytes for asset address + 16 for u128 amount
+pub const FEE_ENTRY_SIZE: usize = 36; // 20 bytes for asset address + 16 for u128 amount
 const ASSET_OFFSET: usize = 0;
 const AMOUNT_OFFSET: usize = 20;
 

@@ -6,17 +6,17 @@ use std::ops::Deref;
 /// Tracks an already RLP encoded, partially validated header. Only validates that the encoding is
 /// valid up to the `receipts_root` field.
 #[derive(Debug, Clone)]
-pub struct EncodedHeaderLens<'a> {
-    encoded: &'a [u8],
+pub struct EncodedHeaderLens<'bytes> {
+    encoded: &'bytes [u8],
     payload_offset: usize,
 }
 
-impl<'a> EncodedHeaderLens<'a> {
+impl<'bytes> EncodedHeaderLens<'bytes> {
     pub fn hash(&self) -> B256 {
         keccak256(self)
     }
 
-    pub fn read_from(reader: &mut Reader<'a>) -> Result<Self, String> {
+    pub fn read_from(reader: &mut Reader<'bytes>) -> Result<Self, String> {
         let head = reader[0];
         let length_bytes = if head > RLP_LIST_OFFSET + RLP_MAX_PACKED_LEN {
             usize::from(head - RLP_LIST_OFFSET - RLP_MAX_PACKED_LEN)

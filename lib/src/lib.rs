@@ -7,14 +7,15 @@ pub mod rlp;
 mod bytes_wrapper_macro;
 
 mod cache;
-mod fee_summary;
+pub mod fee_summary;
 mod keccak;
 mod trie_path;
 
-mod craft_payload;
-
+pub mod payload;
 pub use cache::{Cache, SmolBlock};
 
 pub use keccak::Keccak256;
 
 pub mod testing;
+
+pub mod lazy_header;

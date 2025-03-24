@@ -7,9 +7,6 @@ use std::fs;
 use std::path::Path;
 use tracing::info;
 
-use std::fs::File;
-use std::io::{BufReader, BufWriter};
-
 #[derive(Debug, Clone, Deserialize, Serialize, Default)]
 pub struct SmolBlock {
     pub header: Header,
