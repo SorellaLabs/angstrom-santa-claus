@@ -9,6 +9,7 @@
 sp1_zkvm::entrypoint!(main);
 
 use alloy_eips::eip2718::Encodable2718;
+use alloy_primitives::hex;
 use alloy_primitives::{Address, U256};
 use santa_lib::{
     fee_summary::{FeeSummaryInspector, FEE_ENTRY_SIZE},
@@ -20,8 +21,7 @@ use santa_lib::{
 use std::collections::HashMap;
 
 pub fn main() {
-    let payload = sp1_zkvm::io::read::<Payload>();
-
+    let payload = sp1_zkvm::io::read();
     let (chain_parent, chain_last, sums) = validate_payload(&payload);
 
     let mut out = Vec::with_capacity(20 + 32 + 32 + (20 + 32) * sums.len());

@@ -23,11 +23,14 @@ pub struct Payload {
     pub fee_entries: Vec<u8>,
 }
 
-pub fn build_payload(
+pub fn build_payload<T>(
     blocks: Vec<(Header, Option<Vec<ReceiptEnvelope>>)>,
     angstrom: Address,
-    fee_summary_oracle: &BTreeMap<B256, Vec<FeeEntry>>,
-) -> Payload {
+    fee_summary_oracle: &BTreeMap<B256, T>,
+) -> Payload
+where
+    T: AsRef<[FeeEntry]>,
+{
     let mut headers = Vec::new();
     let mut reward_blocks = Vec::new();
     let mut fee_entries = Vec::new();
@@ -53,7 +56,7 @@ pub fn build_payload(
                 .get(&reward_hash)
                 .expect("Missing fee summary oracle entry");
 
-            for entry in block_fee_entries.iter() {
+            for entry in block_fee_entries.as_ref().iter() {
                 fee_entries.extend_from_slice(entry.as_slice());
             }
 
@@ -62,7 +65,7 @@ pub fn build_payload(
                 proof: get_proof_for_receipt(receipts.as_slice(), receipt_index),
                 receipt: receipt.clone(),
                 log_index: log_index.try_into().unwrap(),
-                fee_entries: block_fee_entries.len().try_into().unwrap(),
+                fee_entries: block_fee_entries.as_ref().len().try_into().unwrap(),
             })
         }
     }

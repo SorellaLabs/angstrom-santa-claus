@@ -2,7 +2,7 @@ use alloy_primitives::{address, Address};
 use alloy_provider::{Provider, ProviderBuilder};
 
 use clap::Parser;
-use santa_lib::{testing::random::LogInjector, Cache, SmolBlock};
+use santa_lib::{payload::build_payload, testing::random::LogInjector, Cache, SmolBlock};
 use sp1_sdk::{include_elf, ProverClient, SP1Stdin};
 use std::collections::HashMap;
 use tracing::info;
@@ -60,6 +60,7 @@ async fn main() -> eyre::Result<()> {
     // Parse the command line arguments.
     let args = Args::parse();
 
+    // Setup the provider.
     let provider: Box<dyn Provider> =
         if args.rpc_url.starts_with("http://") || args.rpc_url.starts_with("https://") {
             let rpc_url = args.rpc_url.parse()?;
@@ -81,6 +82,7 @@ async fn main() -> eyre::Result<()> {
 
     info!("Fetching blocks");
 
+    // Reduce list to blocks that are not already in the cache.
     let block_nums_to_fetch = (start..end)
         .filter_map(|bn| match cache.get_block(bn.into()) {
             Some(_) => None,
@@ -88,7 +90,7 @@ async fn main() -> eyre::Result<()> {
         })
         .collect::<Vec<_>>();
 
-    // Fetch blocks
+    // Fetch missing blocks.
     for (i, blocks) in block_nums_to_fetch.chunks(args.chunk_size).enumerate() {
         info!(
             "Fetching blocks {}-{} / {}",
@@ -125,15 +127,16 @@ async fn main() -> eyre::Result<()> {
     use rand::distr::Distribution;
     let skip_rng = rand::distr::Bernoulli::new(args.skip_prob.into()).unwrap();
 
+    // Determine the blocks in which to inject fake summaries.
     let summary_blocks: Vec<_> = (start..end)
         .step_by(args.log_every)
         .filter(|_| !skip_rng.sample(&mut rng))
         .collect();
 
+    // Get list of transactions and their block number for which we don't have their receipts.
     let tx_hashes = summary_blocks
         .iter()
-        .map(|bn| *bn)
-        .map(|bn: u64| {
+        .map(|&bn| {
             let txs = cache.get_block(bn).unwrap().txs.clone();
             let already_fetched = cache.receipts.get(&bn).map_or(0, Vec::len);
             txs.into_iter()
@@ -143,6 +146,7 @@ async fn main() -> eyre::Result<()> {
         .flatten()
         .collect::<Vec<_>>();
 
+    // Fetch and save receipts.
     let mut offset = 0;
     for tx_hash_batch in tx_hashes.chunks(args.chunk_size) {
         info!(
@@ -173,6 +177,7 @@ async fn main() -> eyre::Result<()> {
     cache.save();
 
     // From this point on `synthetic_blocks` no longer represents real or even valid headers.
+    // Get all block headers and if we're going to inject a summary also get the receipts.
     let mut synthetic_blocks: Vec<_> = (start..end)
         .map(|bn| {
             let header = cache.get_block(bn).unwrap().header.clone();
@@ -184,54 +189,41 @@ async fn main() -> eyre::Result<()> {
         })
         .collect();
 
+    // Inject fake reward summary logs and re-compute header hash chain.
     let mut log_injector = LogInjector::new(ANGSTROM, ASSETS.into(), args.solo_prob.into());
     let mut parent_hash = synthetic_blocks[0].0.parent_hash;
     for (header, receipts) in synthetic_blocks.iter_mut() {
         header.parent_hash = parent_hash;
         if let Some(receipts) = receipts {
-            log_injector.inject_random_log(header, receipts);
+            log_injector.inject_random_summaries(header, receipts);
         }
         parent_hash = header.hash_slow();
     }
-    // log_injector.into_oracle
 
-    // let fee_entry_oracle = inject_fee_summaries(
-    //     summary_blocks,
-    //     |bn| cache.get_header_receipt_pair(bn).unwrap(),
-    //     ANGSTROM,
-    //     Vec::from(ASSETS),
-    //     args.solo_prob,
-    // );
+    let payload = build_payload(synthetic_blocks, ANGSTROM, &log_injector.into_oracle());
 
     if args.execute {
-        // let client = ProverClient::from_env();
+        let client = ProverClient::from_env();
 
-        // use alloy_rlp::Encodable;
+        let mut stdin = SP1Stdin::new();
 
-        // let mut stdin = SP1Stdin::new();
+        // let as_bytes = serde_cbor::to_vec(&payload).unwrap();
+        // println!(
+        //     "alloy_primitives::keccak256(&as_bytes): {:?}",
+        //     alloy_primitives::keccak256(&as_bytes)
+        // );
+        println!("{:?}", &payload.reward_blocks[0].receipt);
+        stdin.write(&payload.reward_blocks[0].receipt);
+        // stdin.write(&payload);
 
-        // let headers = blocks
-        //     .into_iter()
-        //     .map(|b| {
-        //         let header = b.header.inner;
-        //         let mut encoded = Vec::<u8>::with_capacity(header.length());
-        //         header.encode(&mut encoded);
-        //         encoded
-        //     })
-        //     .collect::<Vec<_>>();
-        // let headers = headers.concat();
-
-        // stdin.write_vec(headers);
-
-        // // Execute the program
-        // let (output, report) = client.execute(SANTA_ELF, &stdin).run().unwrap();
-        // println!("Program executed successfully.");
+        let (output, report) = client.execute(SANTA_ELF, &stdin).run().unwrap();
+        println!("Program executed successfully.");
 
         // println!("start: {}", hex::encode(&output.as_slice()[0..32]));
         // println!("end: {}", hex::encode(&output.as_slice()[32..64]));
 
-        // // Record the number of cycles executed.
-        // println!("Number of cycles: {}", report.total_instruction_count());
+        // Record the number of cycles executed.
+        println!("Number of cycles: {}", report.total_instruction_count());
     }
     //else {
     //     // Setup the program for proving.

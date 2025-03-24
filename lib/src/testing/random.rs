@@ -48,7 +48,11 @@ impl LogInjector {
         Log::new(self.angstrom, vec![], data).unwrap()
     }
 
-    pub fn inject_random_log(&mut self, header: &mut Header, receipts: &mut Vec<ReceiptEnvelope>) {
+    pub fn inject_random_summaries(
+        &mut self,
+        header: &mut Header,
+        receipts: &mut Vec<ReceiptEnvelope>,
+    ) {
         let i = self.rng.random_range(0..receipts.len());
         match &mut receipts[i] {
             ReceiptEnvelope::Legacy(r)
